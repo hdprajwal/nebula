@@ -8,6 +8,8 @@ __pycache__/
 build/*
 .markdownlint.json
 
+venv/
+
 # research files
 z_out*
 
