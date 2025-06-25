@@ -28,12 +28,12 @@ if __name__ == "__main__":
     # LOAD DATA
     # ==============
     logging.info(f" [*] Loading data...")
-    train_folder = os.path.join(REPOSITORY_ROOT, "data", "data_filtered", "speakeasy_trainset_BPE_50k_lim_None")
+    train_folder = os.path.join(REPOSITORY_ROOT, "data", "data_filtered", "speakeasy_trainset_BPE_50k")
     xTrainFile = os.path.join(train_folder, f"speakeasy_vocab_size_50000_maxlen_512_x.npy")
     x_train = np.load(xTrainFile)
     yTrainFile = os.path.join(train_folder, "speakeasy_y.npy")
     y_train = np.load(yTrainFile)
-    test_folder = os.path.join(REPOSITORY_ROOT, "data", "data_filtered", "speakeasy_testset_BPE_50k_lim_None")
+    test_folder = os.path.join(REPOSITORY_ROOT, "data", "data_filtered", "speakeasy_testset_BPE_50k")
     xTestFile = os.path.join(test_folder, f"speakeasy_vocab_size_50000_maxlen_512_x.npy")
     x_test = np.load(xTestFile)
     yTestFile = os.path.join(test_folder, "speakeasy_y.npy")
@@ -85,99 +85,84 @@ if __name__ == "__main__":
         pytorch_model=model,
         name="test_training",
         log_folder=f"./cv_test_run_{int(time())}",
-        epochs=2,
+        epochs=3,
         scheduler="onecycle",
         # data config
         batch_size=256,
         dataloader_workers=4,
         # misc
         random_state=0,
-        verbose=True
+        verbose=True,
+        device="gpu"
     )
-    if TRAINING:
-        # ===================
-        # TRAINING
-        # ===================
+    lit_cv.run(x=x_train, y=y_train, print_fold_scores=True)
 
-        lit_cv.run(x=x_train, y=y_train, print_fold_scores=True)
+    logging.info(f" [*] Evaluating on test set...")
 
-    else:
-        # ===================
-        # EVALUATION
-        # ===================
+    # best_model_path = os.path.join(lit_cv.log_folder )
+    
+    # if not os.path.exists(best_model_path):
+    #     print(f"Model file not found: {best_model_path}")
+    #     available_files = os.listdir(lit_cv.log_folder)
+    #     ckpt_files = [f for f in available_files if f.endswith('.ckpt')]
+    #     print(f"Available .ckpt files: {ckpt_files}")
+    #     exit(1)
+    
+    # print(f"[*] Loading model from {best_model_path}...")
+    # lit_cv.load_lit_model(best_model_path)
 
-        logging.info(f" [*] Evaluating on test set...")
+    test_loader = lit_cv.create_dataloader(x_test, y_test, shuffle=False)
+    y_pred = lit_cv.predict_lit_model(test_loader, return_logits=False, decision_threshold=0.5)
+    y_pred_proba = lit_cv.predict_lit_model(test_loader, return_logits=True)
 
-        # IMPORTANT: Setup the trainer first
-        lit_cv.setup_trainer()
+    # Calculate basic metrics
+    from sklearn.metrics import f1_score, roc_auc_score, classification_report, roc_curve
+    import numpy as np
+    
+    f1_test = f1_score(y_test, y_pred)
+    auc_test = roc_auc_score(y_test, y_pred_proba)
 
-        # Load the best model from cross-validation
-        best_model_path = os.path.join(lit_cv.log_folder, "fold_2_lit_model.ckpt")
-        
-        # Check if file exists
-        if not os.path.exists(best_model_path):
-            print(f"Model file not found: {best_model_path}")
-            # List available files
-            available_files = os.listdir(lit_cv.log_folder)
-            ckpt_files = [f for f in available_files if f.endswith('.ckpt')]
-            print(f"Available .ckpt files: {ckpt_files}")
-            exit(1)
-        
-        print(f"[*] Loading model from {best_model_path}...")
-        lit_cv.load_lit_model(best_model_path)
+    # Calculate ROC curve
+    fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba)
+    
+    print(f"fpr: {fpr}")
+    print(f"tpr: {tpr}")
+    print(f"thresholds: {thresholds}")
 
-        test_loader = lit_cv.create_dataloader(x_test, y_test, shuffle=False)
-        y_pred = lit_cv.predict_lit_model(test_loader, return_logits=False, decision_threshold=0.5)
-        y_pred_proba = lit_cv.predict_lit_model(test_loader, return_logits=True)
-
-        # Calculate basic metrics
-        from sklearn.metrics import f1_score, roc_auc_score, classification_report, roc_curve
-        import numpy as np
-        
-        f1_test = f1_score(y_test, y_pred)
-        auc_test = roc_auc_score(y_test, y_pred_proba)
-
-        # Calculate ROC curve
-        fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba)
-        
-        print(f"fpr: {fpr}")
-        print(f"tpr: {tpr}")
-        print(f"thresholds: {thresholds}")
-
-        # Calculate TPR at specific FPR values (including 10^-3)
-        target_fprs = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1]  # Including 10^-3
-        
-        print(f"\n{'='*50}")
-        print(f"TEST SET EVALUATION RESULTS")
-        print(f"{'='*50}")
-        print(f"Overall F1 Score: {f1_test:.4f}")
-        print(f"Overall AUC-ROC:  {auc_test:.4f}")
-        print(f"Test set size:    {len(y_test)}")
-        
-        print(f"\nTPR at specific FPR thresholds:")
-        print(f"{'FPR':<10} {'TPR':<8} {'F1':<8} {'Threshold':<10}")
-        print(f"{'-'*40}")
-        
-        for target_fpr in target_fprs:
-            if np.any(fpr <= target_fpr):
-                tpr_at_fpr = tpr[fpr <= target_fpr][-1]
-                threshold_at_fpr = thresholds[fpr <= target_fpr][-1]
-                
-                # Calculate F1 at this threshold
-                y_pred_at_threshold = (y_pred_proba >= threshold_at_fpr).astype(int) if isinstance(y_pred_proba, np.ndarray) else (y_pred_proba >= threshold_at_fpr).int().numpy()
-                f1_at_fpr = f1_score(y_test, y_pred_at_threshold)
-                
-                print(f"{target_fpr:<10.1e} {tpr_at_fpr:<8.4f} {f1_at_fpr:<8.4f} {threshold_at_fpr:<10.4f}")
-            else:
-                print(f"{target_fpr:<10.1e} {'N/A':<8} {'N/A':<8} {'N/A':<10}")
-        
-        # Specifically highlight TPR at FPR = 10^-3
-        target_fpr_001 = 0.001
-        if np.any(fpr <= target_fpr_001):
-            tpr_at_001 = tpr[fpr <= target_fpr_001][-1]
-            print(f"\n🎯 ANSWER: TPR at FPR = 10^-3 (0.001) = {tpr_at_001:.4f}")
+    # Calculate TPR at specific FPR values (including 10^-3)
+    target_fprs = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1]  # Including 10^-3
+    
+    print(f"\n{'='*50}")
+    print(f"TEST SET EVALUATION RESULTS")
+    print(f"{'='*50}")
+    print(f"Overall F1 Score: {f1_test:.4f}")
+    print(f"Overall AUC-ROC:  {auc_test:.4f}")
+    print(f"Test set size:    {len(y_test)}")
+    
+    print(f"\nTPR at specific FPR thresholds:")
+    print(f"{'FPR':<10} {'TPR':<8} {'F1':<8} {'Threshold':<10}")
+    print(f"{'-'*40}")
+    
+    for target_fpr in target_fprs:
+        if np.any(fpr <= target_fpr):
+            tpr_at_fpr = tpr[fpr <= target_fpr][-1]
+            threshold_at_fpr = thresholds[fpr <= target_fpr][-1]
+            
+            # Calculate F1 at this threshold
+            y_pred_at_threshold = (y_pred_proba >= threshold_at_fpr).astype(int) if isinstance(y_pred_proba, np.ndarray) else (y_pred_proba >= threshold_at_fpr).int().numpy()
+            f1_at_fpr = f1_score(y_test, y_pred_at_threshold)
+            
+            print(f"{target_fpr:<10.1e} {tpr_at_fpr:<8.4f} {f1_at_fpr:<8.4f} {threshold_at_fpr:<10.4f}")
         else:
-            print(f"\n❌ Cannot achieve FPR = 10^-3 with current model predictions")
-        
-        print(f"\nDetailed Classification Report:")
-        print(classification_report(y_test, y_pred))
+            print(f"{target_fpr:<10.1e} {'N/A':<8} {'N/A':<8} {'N/A':<10}")
+    
+    # Specifically highlight TPR at FPR = 10^-3
+    target_fpr_001 = 0.001
+    if np.any(fpr <= target_fpr_001):
+        tpr_at_001 = tpr[fpr <= target_fpr_001][-1]
+        print(f"\n🎯 ANSWER: TPR at FPR = 10^-3 (0.001) = {tpr_at_001:.4f}")
+    else:
+        print(f"\n❌ Cannot achieve FPR = 10^-3 with current model predictions")
+    
+    print(f"\nDetailed Classification Report:")
+    print(classification_report(y_test, y_pred))

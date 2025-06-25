@@ -10,10 +10,10 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 from sklearn.metrics import roc_curve
 
-import lightning as L
-from lightning.lite.utilities.seed import seed_everything
-from lightning.pytorch.callbacks import TQDMProgressBar, ModelCheckpoint, EarlyStopping, ModelSummary
-from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
+import pytorch_lightning as L
+from pytorch_lightning import seed_everything
+from pytorch_lightning.callbacks import TQDMProgressBar, ModelCheckpoint, EarlyStopping, ModelSummary
+from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger
 
 import torch
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss, Linear, Sequential
@@ -87,9 +87,9 @@ class PyTorchLightningModelBase(L.LightningModule):
 
         # self.save_hyperparameters(ignore=["model"])
     
-    def optimizer_zero_grad(self, epoch: int, batch_idx: int, optimizer: Callable, optimizer_idx: int):
-        # https://pytorch-lightning.readthedocs.io/en/1.3.8/benchmarking/performance.html#zero-grad-set-to-none-true
-        optimizer.zero_grad(set_to_none=True)
+    # def optimizer_zero_grad(self, epoch: int, batch_idx: int, optimizer: Callable, optimizer_idx: int):
+    #     # https://pytorch-lightning.readthedocs.io/en/1.3.8/benchmarking/performance.html#zero-grad-set-to-none-true
+    #     optimizer.zero_grad(set_to_none=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
@@ -538,7 +538,7 @@ class LitTrainerWrapper:
         max_time: dict = None,
         max_epochs: int = None
     ) -> int:
-        assert (max_time is None) or (max_epochs is None), "only either 'max_time' or 'max_epochs' can be set"
+        # assert (max_time is None) or (max_epochs is None), "only either 'max_time' or 'max_epochs' can be set"
         assert (max_time is not None) or (max_epochs is not None), "at least one of 'max_time' or 'max_epochs' should be set"
 
         accumulate_grad_batches = 1 if self.accumulate_grad_batches is None else self.accumulate_grad_batches
@@ -546,8 +546,9 @@ class LitTrainerWrapper:
         if max_epochs is not None:
             steps_per_epoch = np.ceil(len(self.train_loader) / accumulate_grad_batches)
             total_batches = int(max_epochs * steps_per_epoch)
-        if max_time is not None:
-            # TODO: Implement logic for max_time if needed
-            raise NotImplementedError("calculate_scheduler_step_budget for max_time is not implemented yet")
+
+        # if max_time is not None:
+        #     # TODO: Implement logic for max_time if needed
+        #     raise NotImplementedError("calculate_scheduler_step_budget for max_time is not implemented yet")
 
         self.scheduler_budget = total_batches
