@@ -14,8 +14,8 @@ from nebula import PEDynamicFeatureExtractor, JSONTokenizerBPE
 # SCRIPT CONFIG
 
 LIMIT = 100
-VOCABS = {50000: "50k"}
-MAX_SEQ_LENGTHS = [512]
+VOCAB_SIZE = 50000
+MAX_SEQ_LENGTH = 512
 
 # from nebula.constants import *
 # PREPROCESSING CONFIG AS DEFINED IN nebula.constants
@@ -68,60 +68,53 @@ def main(limit=None):
 
     # ======= ENCODING REPORTS WITH DIFFERENT MAX SEQ LENGTHS & VOCAB SIZES =====
 
-    for vocab_size in VOCABS.keys():
-        OUTFOLDER_SUFFIX = f"_BPE_50k"
-        
-        TRAIN_OUT_FOLDER = os.path.join(REPO_ROOT, "data", "data_filtered", f"speakeasy_trainset{OUTFOLDER_SUFFIX}")
-        os.makedirs(TRAIN_OUT_FOLDER, exist_ok=True)
-        
-        TEST_OUT_FOLDER = os.path.join(REPO_ROOT, "data", "data_filtered", f"speakeasy_testset{OUTFOLDER_SUFFIX}")
-        os.makedirs(TEST_OUT_FOLDER, exist_ok=True)
+    OUTFOLDER_SUFFIX = f"_BPE_50k"
+    
+    TRAIN_OUT_FOLDER = os.path.join(REPO_ROOT, "data", "data_filtered", f"speakeasy_trainset{OUTFOLDER_SUFFIX}")
+    os.makedirs(TRAIN_OUT_FOLDER, exist_ok=True)
+    
+    TEST_OUT_FOLDER = os.path.join(REPO_ROOT, "data", "data_filtered", f"speakeasy_testset{OUTFOLDER_SUFFIX}")
+    os.makedirs(TEST_OUT_FOLDER, exist_ok=True)
 
-        # HANDLE Ys
-        with open(os.path.join(TRAIN_OUT_FOLDER, "speakeasy_yHashes.json"), "w") as f:
-            json.dump(yHashesTrain, f, indent=4)
-        with open(os.path.join(TEST_OUT_FOLDER, "speakeasy_yHashes.json"), "w") as f:
-            json.dump(yHashesTest, f, indent=4)
-        np.save(os.path.join(TRAIN_OUT_FOLDER, f"speakeasy_y.npy"), np.array(yTrain, dtype=np.int8))
-        np.save(os.path.join(TEST_OUT_FOLDER, f"speakeasy_y.npy"), np.array(yTest, dtype=np.int8))
+    # HANDLE Ys
+    with open(os.path.join(TRAIN_OUT_FOLDER, "speakeasy_yHashes.json"), "w") as f:
+        json.dump(yHashesTrain, f, indent=4)
+    with open(os.path.join(TEST_OUT_FOLDER, "speakeasy_yHashes.json"), "w") as f:
+        json.dump(yHashesTest, f, indent=4)
+    np.save(os.path.join(TRAIN_OUT_FOLDER, f"speakeasy_y.npy"), np.array(yTrain, dtype=np.int8))
+    np.save(os.path.join(TEST_OUT_FOLDER, f"speakeasy_y.npy"), np.array(yTest, dtype=np.int8))
 
 
-        # HANDLE Xs
-        for maxSeqLen in MAX_SEQ_LENGTHS: 
-            tokenizer = JSONTokenizerBPE(
-                cleanup_symbols=JSON_CLEANUP_SYMBOLS,
-                stopwords=SPEAKEASY_TOKEN_STOPWORDS,
-                vocab_size=vocab_size,
-                seq_len=maxSeqLen
-            )
+    # HANDLE Xs
+    tokenizer = JSONTokenizerBPE(
+        cleanup_symbols=JSON_CLEANUP_SYMBOLS,
+        stopwords=SPEAKEASY_TOKEN_STOPWORDS,
+        vocab_size=VOCAB_SIZE,
+        seq_len=MAX_SEQ_LENGTH
+    )
 
-            filePrefix = f"speakeasy_vocab_size_{vocab_size}"
-            if os.path.exists(os.path.join(TRAIN_OUT_FOLDER, f"{filePrefix}_x.npy")) and \
-                os.path.exists(os.path.join(TEST_OUT_FOLDER, f"{filePrefix}_x.npy")):
-                logging.warning(f" [!] Skipping {filePrefix} because files already exist")
-                continue
+    filePrefix = f"speakeasy_vocab_size_{VOCAB_SIZE}"
+    if os.path.exists(os.path.join(TRAIN_OUT_FOLDER, f"{filePrefix}_x.npy")) and \
+        os.path.exists(os.path.join(TEST_OUT_FOLDER, f"{filePrefix}_x.npy")):
+        logging.warning(f" [!] Skipping {filePrefix} because files already exist")
+        exit()
 
-            # training tokenizer -- building vocabulary on train set
-            logging.warning(f"Training tokenizer with vocab size: {vocab_size}...")
-            tokenizer.train(
-                eventsTrain,
-                model_prefix = os.path.join(TRAIN_OUT_FOLDER, f"{filePrefix}_tokenizer"),
-                removeTrainFiles=False
-            )
-            # encoding
-            logging.warning(f"Encoding...")
-            eventsEncodedTrain = tokenizer.encode(eventsTrain, pad=True)
-            eventsEncodedTest = tokenizer.encode(eventsTest, pad=True)
-            
-            # padding -- done in encode() above
-            # logging.warning(f"Padding with maxLen={maxSeqLen}...")
-            # eventsEncodedPaddedTrain = tokenizer.pad_sequences(eventsEncodedTrain)
-            # eventsEncodedPaddedTest = tokenizer.pad_sequences(eventsEncodedTest)
-            
-            # saving processed arrays
-            logging.warning(f"Saving files with prefix: {filePrefix}_maxlen_{maxSeqLen}")
-            np.save(os.path.join(TRAIN_OUT_FOLDER, f"{filePrefix}_maxlen_{maxSeqLen}_x.npy"), eventsEncodedTrain)
-            np.save(os.path.join(TEST_OUT_FOLDER, f"{filePrefix}_maxlen_{maxSeqLen}_x.npy"), eventsEncodedTest)
+    # training tokenizer -- building vocabulary on train set
+    logging.warning(f"Training tokenizer with vocab size: {VOCAB_SIZE}...")
+    tokenizer.train(
+        eventsTrain,
+        model_prefix = os.path.join(TRAIN_OUT_FOLDER, f"{filePrefix}_tokenizer"),
+        removeTrainFiles=False
+    )
+    # encoding
+    logging.warning(f"Encoding...")
+    eventsEncodedTrain = tokenizer.encode(eventsTrain, pad=True)
+    eventsEncodedTest = tokenizer.encode(eventsTest, pad=True)
+    
+    # saving processed arrays
+    logging.warning(f"Saving files with prefix: {filePrefix}_maxlen_{MAX_SEQ_LENGTH}")
+    np.save(os.path.join(TRAIN_OUT_FOLDER, f"{filePrefix}_maxlen_{MAX_SEQ_LENGTH}_x.npy"), eventsEncodedTrain)
+    np.save(os.path.join(TEST_OUT_FOLDER, f"{filePrefix}_maxlen_{MAX_SEQ_LENGTH}_x.npy"), eventsEncodedTest)
 
 
 def readAndFilterFolders(subFolders, parserFunction, limit=None):
@@ -170,5 +163,4 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 
     # ===============
-    main(limit=LIMIT)
-    #main()
+    main(limit=None)
